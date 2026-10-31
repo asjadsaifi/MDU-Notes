@@ -1,6 +1,10 @@
 # MDU Notes | StudyShelf
 
-StudyShelf sells one digital Physics bundle for **$1.00 USD**: `physics.unit 1 and 2` and `questionpaper2020`, delivered only after a successful Razorpay payment is verified by the app.
+MDU Notes (StudyShelf) is a study-material storefront for Maharshi Dayanand University (MDU) students. It currently lists a Physics study bundle with Unit 1 and 2 notes and a 2020 question paper for **$1.00 USD**.
+
+Public website: [MDU Notes](https://mdu-notes-3ylgkzkawimsbtcbofzps5.streamlit.app/)
+
+The site title and page copy describe MDU study notes, Physics notes, and previous-year question papers to help visitors and search engines understand the site. Search ranking and Google indexing are controlled by Google and cannot be guaranteed. Streamlit Community Cloud provides app hosting; it does not guarantee that Google will index or rank a Streamlit app.
 
 ## Local development
 
@@ -60,6 +64,8 @@ Save secrets, then reboot the app. Make a small test-mode payment before enablin
 ## Public deployment
 
 The app is deployed from the `asjadsaifi/MDU-Notes` GitHub repository, branch `main`, main file `app.py`. Streamlit Community Cloud rebuilds the app when the branch is updated. Its public URL is [mdu-notes-3ylgkzkawimsbtcbofzps5.streamlit.app](https://mdu-notes-3ylgkzkawimsbtcbofzps5.streamlit.app/).
+
+In the Streamlit workspace, confirm **Settings → Sharing → This app is public and searchable**. Google may still take time to crawl it, and no setting can guarantee first-page placement for a broad search such as "MDU Notes." A custom domain and an SEO-oriented website with crawlable pages give more control, but also cannot guarantee a particular ranking.
 
 ## How paid delivery works
 

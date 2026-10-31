@@ -11,7 +11,11 @@ from study_store import (
 )
 
 
-st.set_page_config(page_title="MDU Notes | StudyShelf", page_icon="📚", layout="wide")
+st.set_page_config(
+    page_title="MDU Notes | MDU Study Notes & Question Papers",
+    page_icon="📚",
+    layout="wide",
+)
 
 st.markdown(
     """
@@ -68,9 +72,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<h2 class="section-title">Physics study bundle</h2>', unsafe_allow_html=True)
+st.markdown('<h2 class="section-title">MDU Physics notes and question papers</h2>', unsafe_allow_html=True)
 st.markdown(
-    '<p class="section-subtitle">A two-file digital bundle from the MDU Notes collection.</p>',
+    '<p class="section-subtitle">StudyShelf is an MDU study-material storefront for Maharshi Dayanand University students. '
+    "Browse subject notes, revision resources, and previous-year question papers for focused exam preparation.</p>",
     unsafe_allow_html=True,
 )
 
@@ -153,3 +158,26 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.caption("Digital materials are delivered after Razorpay confirms successful payment. Please purchase only for personal study.")
+
+st.divider()
+st.subheader("About MDU Notes")
+st.write(
+    "MDU Notes is a study-material collection for students of Maharshi Dayanand University (MDU), "
+    "also known as MDU Rohtak. Find MDU study notes, subject revision material, and previous-year "
+    "question papers in one place. The current listing is a Physics bundle with Unit 1 and 2 notes "
+    "and a 2020 question paper."
+)
+with st.expander("What is included in the Physics study bundle?"):
+    st.write(
+        "The bundle contains two PDFs: Physics Unit 1 and 2 notes, plus the 2020 Physics question paper."
+    )
+with st.expander("Who is MDU Notes for?"):
+    st.write(
+        "The materials are intended for MDU students looking for Physics notes and question-paper "
+        "practice. Check your course and syllabus before studying from any resource."
+    )
+with st.expander("How do I access the PDFs?"):
+    st.write(
+        "The bundle is listed for $1.00 USD. Secure checkout and private PDF delivery will be available "
+        "after the store owner completes the Razorpay and Google Drive setup."
+    )
