@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import streamlit as st
 
-from study_store import CATEGORIES, PRODUCTS, cart_total, filter_products
+from payments import PaymentConfigurationError, PaymentError, create_payment_link, verify_payment
+from study_store import (
+    DeliveryConfigurationError,
+    DeliveryError,
+    PHYSICS_BUNDLE,
+    load_paid_files,
+)
 
 
-st.set_page_config(page_title="StudyShelf | Student notes & papers", page_icon="📚", layout="wide")
+st.set_page_config(page_title="MDU Notes | StudyShelf", page_icon="📚", layout="wide")
 
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-    :root { --ink: #1c3028; --muted: #68776e; --green: #245c43; --lime: #d7ed9f; --paper: #f7f8f3; --line: #e7e9e1; }
+    :root { --ink: #1c3028; --muted: #68776e; --green: #245c43; --paper: #f7f8f3; --line: #e7e9e1; }
     .stApp { background: var(--paper); color: var(--ink); font-family: 'DM Sans', sans-serif; }
     [data-testid="stHeader"] { background: transparent; }
     .block-container { max-width: 1220px; padding-top: 1.5rem; padding-bottom: 3rem; }
@@ -25,16 +31,14 @@ st.markdown(
     .hero-mark { position: absolute; right: 7%; top: 14%; font-size: 7rem; transform: rotate(9deg); }
     .section-title { margin: 2.25rem 0 .2rem; }
     .section-subtitle { color: var(--muted); margin-bottom: 1rem; }
-    .product-card { height: 100%; min-height: 255px; padding: 1.1rem; background: white; border: 1px solid var(--line); border-radius: 16px; }
-    .cover { height: 100px; border-radius: 12px; display:flex; align-items:center; justify-content:center; font-size: 2.6rem; margin-bottom: .95rem; }
-    .product-type { color: var(--green); font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-    .product-name { font-family: 'Manrope', sans-serif; font-size: 1.03rem; font-weight: 750; line-height: 1.3; min-height: 2.65rem; margin: .35rem 0; }
-    .product-meta { color: var(--muted); font-size: .83rem; }
-    .product-price { color: var(--ink); font-size: 1.08rem; font-weight: 750; margin-top: .7rem; }
-    [data-testid="stVerticalBlockBorderWrapper"] { border-color: var(--line); }
+    .product-card { padding: 1.3rem; background: white; border: 1px solid var(--line); border-radius: 16px; }
+    .cover { height: 130px; border-radius: 12px; display:flex; align-items:center; justify-content:center; font-size: 3.2rem; margin-bottom: 1rem; background: #e6efe1; }
+    .product-type { color: var(--green); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .product-name { font-family: 'Manrope', sans-serif; font-size: 1.15rem; font-weight: 750; line-height: 1.3; margin: .4rem 0; }
+    .product-meta { color: var(--muted); font-size: .88rem; }
+    .product-price { color: var(--ink); font-size: 1.25rem; font-weight: 750; margin-top: .8rem; }
     .stButton button, .stLinkButton a { border-radius: 9px; font-weight: 650; }
     .stButton button[kind="primary"] { background: var(--green); border-color: var(--green); }
-    [data-testid="stSidebar"] { background: #fff; }
     .trust-row { color: #526459; background: white; border: 1px solid var(--line); padding: 1rem 1.2rem; border-radius: 13px; }
     @media (max-width: 700px) {
       .block-container { padding: 1rem 1rem 2rem; }
@@ -46,106 +50,106 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if "cart" not in st.session_state:
-    st.session_state.cart = {}
-
-header_brand, header_note, header_cart = st.columns([2, 5, 1])
-with header_brand:
-    st.markdown('<div class="brand">✳ StudyShelf</div>', unsafe_allow_html=True)
-with header_note:
-    st.markdown('<div class="top-note">Good study material. Better study days.</div>', unsafe_allow_html=True)
-with header_cart:
-    cart_count = sum(st.session_state.cart.values())
-    st.markdown(f'<div class="top-note" style="text-align:right">🛍️ {cart_count} in bag</div>', unsafe_allow_html=True)
+brand, tagline = st.columns([1, 5])
+with brand:
+    st.markdown('<div class="brand">✳ MDU Notes</div>', unsafe_allow_html=True)
+with tagline:
+    st.markdown('<div class="top-note">StudyShelf · Good study material. Better study days.</div>', unsafe_allow_html=True)
 
 st.markdown(
     """
     <section class="hero">
-      <div class="hero-kicker">Your next study session starts here</div>
+      <div class="hero-kicker">Made for your next study session</div>
       <h1>Find your focus.<br>Find your next A.</h1>
-      <div class="hero-copy">Student-made notes, revision packs, and question papers—picked to help you spend less time searching and more time learning.</div>
+      <div class="hero-copy">Browse study notes and question papers for Maharshi Dayanand University students.</div>
       <div class="hero-mark">✎</div>
     </section>
     """,
     unsafe_allow_html=True,
 )
 
-with st.sidebar:
-    st.title("Your study bag")
-    cart = st.session_state.cart
-    if not cart:
-        st.caption("Your bag is empty. Add a resource to get started.")
-    else:
-        for product_id, quantity in list(cart.items()):
-            product = next((item for item in PRODUCTS if item["id"] == product_id), None)
-            if product is None:
-                continue
-            item_col, remove_col = st.columns([5, 1])
-            with item_col:
-                st.markdown(f"**{product['title']}**  \n₹{product['price']} × {quantity}")
-            with remove_col:
-                if st.button("−", key=f"remove_{product_id}", help="Remove one"):
-                    if quantity <= 1:
-                        del st.session_state.cart[product_id]
-                    else:
-                        st.session_state.cart[product_id] -= 1
-                    st.rerun()
-        st.divider()
-        st.markdown(f"### Total · ₹{cart_total(cart, PRODUCTS):,.0f}")
-        with st.form("demo_checkout"):
-            email = st.text_input("Email for your digital order", placeholder="you@example.com")
-            checkout = st.form_submit_button("Continue to checkout", type="primary", use_container_width=True)
-            if checkout:
-                if "@" not in email or email.startswith("@") or email.endswith("@"):
-                    st.error("Enter a valid email address to continue.")
-                else:
-                    st.info("This is a storefront preview. No payment is processed and no files are delivered yet.")
+st.markdown('<h2 class="section-title">Physics study bundle</h2>', unsafe_allow_html=True)
+st.markdown(
+    '<p class="section-subtitle">A two-file digital bundle from the MDU Notes collection.</p>',
+    unsafe_allow_html=True,
+)
 
-st.markdown('<h2 class="section-title">The study shelf</h2>', unsafe_allow_html=True)
-st.markdown('<p class="section-subtitle">A little structure goes a long way. Find something for your next study session.</p>', unsafe_allow_html=True)
+callback = st.query_params
+callback_fields = {
+    "razorpay_payment_id",
+    "razorpay_payment_link_id",
+    "razorpay_payment_link_reference_id",
+    "razorpay_payment_link_status",
+    "razorpay_signature",
+}
 
-search_col, category_col, sort_col = st.columns([3, 2, 2])
-with search_col:
-    search_term = st.text_input("Search resources", placeholder="Try “biology” or “exam papers”", label_visibility="collapsed")
-with category_col:
-    category = st.selectbox("Category", CATEGORIES, label_visibility="collapsed")
-with sort_col:
-    sort_order = st.selectbox("Sort by", ["Featured", "Price: low to high", "Price: high to low"], label_visibility="collapsed")
-
-visible_products = filter_products(PRODUCTS, search_term, category, sort_order)
-st.caption(f"{len(visible_products)} resources")
-
-if not visible_products:
-    st.info("No resources match that search. Try another subject or choose a different category.")
+if callback_fields.issubset(callback.keys()):
+    st.subheader("Checking your payment")
+    try:
+        paid = verify_payment(
+            payment_id=callback["razorpay_payment_id"],
+            payment_link_id=callback["razorpay_payment_link_id"],
+            reference_id=callback["razorpay_payment_link_reference_id"],
+            status=callback["razorpay_payment_link_status"],
+            signature=callback["razorpay_signature"],
+        )
+        if not paid:
+            st.error("Payment could not be verified. Your files remain locked. Please contact the store owner with your Razorpay payment receipt.")
+        else:
+            st.success("Payment verified.")
+            try:
+                for file_name, file_content in load_paid_files():
+                    st.download_button(
+                        f"Download {file_name}",
+                        data=file_content,
+                        file_name=file_name,
+                        mime="application/pdf",
+                        key=f"download_{file_name}",
+                    )
+            except DeliveryConfigurationError:
+                st.error("Payment was received, but private file delivery is not configured. Contact the store owner with your Razorpay receipt.")
+            except DeliveryError as error:
+                st.error(f"Payment was received, but file delivery failed: {error} Contact the store owner with your Razorpay receipt.")
+    except PaymentConfigurationError:
+        st.error("Secure delivery is not configured yet. Please contact the store owner.")
+    except PaymentError as error:
+        st.error(f"Could not complete the secure payment check: {error}")
 else:
-    for row_start in range(0, len(visible_products), 3):
-        columns = st.columns(3, gap="medium")
-        for column, product in zip(columns, visible_products[row_start : row_start + 3]):
-            with column:
-                st.markdown(
-                    f"""
-                    <div class="product-card">
-                      <div class="cover" style="background:{product['color']}">{product['icon']}</div>
-                      <div class="product-type">{product['kind']} · {product['level']}</div>
-                      <div class="product-name">{product['title']}</div>
-                      <div class="product-meta">{product['subject']} &nbsp;·&nbsp; ★ {product['rating']}</div>
-                      <div class="product-price">₹{product['price']}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                if st.button("Add to bag", key=f"add_{product['id']}", type="primary", use_container_width=True):
-                    st.session_state.cart[product["id"]] = st.session_state.cart.get(product["id"], 0) + 1
-                    st.rerun()
+    with st.container(border=True):
+        st.markdown(
+            f"""
+            <div class="product-card">
+              <div class="cover">⚛️</div>
+              <div class="product-type">PDFs · Physics</div>
+              <div class="product-name">{PHYSICS_BUNDLE['title']}</div>
+              <div class="product-meta">Includes physics unit 1 and 2 notes and questionpaper2020.</div>
+              <div class="product-price">$1.00 USD · both PDFs</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        buyer_email = st.text_input("Email for your payment receipt", placeholder="you@example.com")
+        if st.button("Continue to secure Razorpay checkout · $1.00", type="primary"):
+            if "@" not in buyer_email or buyer_email.startswith("@") or buyer_email.endswith("@"):
+                st.error("Enter a valid email address to continue.")
+            else:
+                try:
+                    checkout_url = create_payment_link(buyer_email)
+                    st.link_button("Open Razorpay secure checkout", checkout_url, type="primary")
+                    st.caption("After payment, Razorpay will return here to verify the payment and unlock the PDFs.")
+                except PaymentConfigurationError:
+                    st.error("Checkout is not configured yet. The store owner must finish the secure setup before accepting payments.")
+                except PaymentError as error:
+                    st.error(f"Could not create a checkout link: {error}")
 
 st.markdown(
     """
     <div class="trust-row">
-      📄 <strong>Instant-ready study resources</strong> &nbsp;&nbsp; · &nbsp;&nbsp;
-      🎓 Made for students &nbsp;&nbsp; · &nbsp;&nbsp;
-      🔒 Secure checkout coming soon
+      📄 Two Physics PDFs &nbsp;&nbsp; · &nbsp;&nbsp;
+      💳 Secure checkout via Razorpay &nbsp;&nbsp; · &nbsp;&nbsp;
+      🔒 Files unlock only after payment verification
     </div>
     """,
     unsafe_allow_html=True,
 )
-st.caption("StudyShelf is a storefront demo. Product listings are sample content; checkout, payments, and downloads are not connected.")
+st.caption("Digital materials are delivered after Razorpay confirms successful payment. Please purchase only for personal study.")

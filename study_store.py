@@ -2,47 +2,99 @@ from __future__ import annotations
 
 from typing import Any
 
-
-PRODUCTS: list[dict[str, Any]] = [
-    {"id": "physics-formula-kit", "title": "Physics Formula Revision Kit", "subject": "Physics", "kind": "Notes", "level": "Grade 12", "price": 149, "rating": "4.9", "icon": "⚛️", "color": "#e6efe1"},
-    {"id": "biology-diagrams", "title": "Biology: 50 Must-Know Diagrams", "subject": "Biology", "kind": "Notes", "level": "Grade 11–12", "price": 99, "rating": "4.8", "icon": "🌿", "color": "#eaf0dc"},
-    {"id": "maths-past-papers", "title": "Mathematics Past Paper Pack", "subject": "Mathematics", "kind": "Question Papers", "level": "Grade 12", "price": 199, "rating": "4.9", "icon": "∑", "color": "#e1e9f4"},
-    {"id": "chemistry-crash-course", "title": "Organic Chemistry Crash Notes", "subject": "Chemistry", "kind": "Notes", "level": "Grade 12", "price": 129, "rating": "4.7", "icon": "🧪", "color": "#f4e8d9"},
-    {"id": "commerce-board-bundle", "title": "Commerce Board Exam Bundle", "subject": "Commerce", "kind": "Study Bundles", "level": "Grade 12", "price": 249, "rating": "5.0", "icon": "📈", "color": "#e8e4f2"},
-    {"id": "english-literature-guide", "title": "English Literature Quick Guide", "subject": "English", "kind": "Notes", "level": "Grade 10", "price": 89, "rating": "4.6", "icon": "📖", "color": "#f4e3e1"},
-    {"id": "science-mock-exams", "title": "Science Mock Exam Set · 2025", "subject": "Science", "kind": "Question Papers", "level": "Grade 10", "price": 179, "rating": "4.8", "icon": "📝", "color": "#e0efed"},
-    {"id": "calculus-study-pack", "title": "Calculus Concepts & Practice", "subject": "Mathematics", "kind": "Study Bundles", "level": "Grade 11–12", "price": 219, "rating": "4.9", "icon": "∫", "color": "#f3ecd9"},
-    {"id": "history-revision-notes", "title": "Modern History Revision Notes", "subject": "History", "kind": "Notes", "level": "Grade 12", "price": 119, "rating": "4.7", "icon": "🏛️", "color": "#eee5dc"},
-]
-
-CATEGORIES = ["All resources", "Notes", "Question Papers", "Study Bundles"]
+import requests
+from google.auth.exceptions import GoogleAuthError
+from google.oauth2 import service_account
+from google.auth.transport.requests import AuthorizedSession
+import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 
-def filter_products(
-    products: list[dict[str, Any]],
-    search_term: str = "",
-    category: str = "All resources",
-    sort_order: str = "Featured",
-) -> list[dict[str, Any]]:
-    query = search_term.strip().casefold()
-    results = [
-        product
-        for product in products
-        if (category == "All resources" or product["kind"] == category)
-        and (
-            not query
-            or query in product["title"].casefold()
-            or query in product["subject"].casefold()
-            or query in product["level"].casefold()
+PHYSICS_BUNDLE: dict[str, Any] = {
+    "id": "mdu-physics-bundle",
+    "title": "Physics Unit 1 & 2 Notes + 2020 Question Paper",
+    "amount_minor": 100,
+    "currency": "USD",
+    "folder_id": "1Wv3ZJr2-PKK0sefEXCEEyTaT8fNopjQP",
+}
+
+EXPECTED_FILES = {
+    "physics.unit 1 and 2",
+    "questionpaper2020",
+}
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
+
+
+class DeliveryConfigurationError(RuntimeError):
+    pass
+
+
+class DeliveryError(RuntimeError):
+    pass
+
+
+def _drive_session() -> AuthorizedSession:
+    try:
+        service_account_info = dict(st.secrets["gcp_service_account"])
+        drive_settings = st.secrets["drive"]
+    except (StreamlitSecretNotFoundError, KeyError) as error:
+        raise DeliveryConfigurationError("Google Drive delivery credentials are missing.")
+    folder_id = drive_settings.get("folder_id")
+    if not folder_id:
+        raise DeliveryConfigurationError("Google Drive folder ID is missing.")
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=[DRIVE_SCOPE],
         )
-    ]
-    if sort_order == "Price: low to high":
-        results.sort(key=lambda product: product["price"])
-    elif sort_order == "Price: high to low":
-        results.sort(key=lambda product: product["price"], reverse=True)
-    return results
+    except (GoogleAuthError, ValueError, KeyError) as error:
+        raise DeliveryConfigurationError("Google Drive service-account credentials are invalid.") from error
+    return AuthorizedSession(credentials)
 
 
-def cart_total(cart: dict[str, int], products: list[dict[str, Any]]) -> int:
-    prices = {product["id"]: product["price"] for product in products}
-    return sum(prices[product_id] * quantity for product_id, quantity in cart.items() if product_id in prices)
+def load_paid_files() -> list[tuple[str, bytes]]:
+    session = _drive_session()
+    folder_id = st.secrets["drive"]["folder_id"]
+    try:
+        response = session.get(
+            DRIVE_FILES_URL,
+            params={
+                "q": f"'{folder_id}' in parents and trashed = false and mimeType = 'application/pdf'",
+                "fields": "nextPageToken,files(id,name,mimeType)",
+                "pageSize": 100,
+            },
+            timeout=30,
+        )
+    except requests.RequestException as error:
+        raise DeliveryError("Google Drive could not be reached to list the private folder.") from error
+    if not response.ok:
+        raise DeliveryError(f"Google Drive could not list the private folder (HTTP {response.status_code}).")
+
+    files = response.json().get("files", [])
+    matching = {
+        item["name"].casefold().removesuffix(".pdf"): item
+        for item in files
+        if item.get("mimeType") == "application/pdf" and item.get("name")
+    }
+    if not EXPECTED_FILES.issubset(matching):
+        raise DeliveryError("The private folder is missing one or more expected PDF files.")
+
+    downloads: list[tuple[str, bytes]] = []
+    for expected_name in sorted(EXPECTED_FILES):
+        file_info = matching[expected_name]
+        file_name = file_info["name"]
+        if not file_name.casefold().endswith(".pdf"):
+            file_name = f"{file_name}.pdf"
+        try:
+            download_response = session.get(
+                f"{DRIVE_FILES_URL}/{file_info['id']}",
+                params={"alt": "media"},
+                timeout=60,
+            )
+        except requests.RequestException as error:
+            raise DeliveryError(f"Google Drive could not be reached to download {file_name}.") from error
+        if not download_response.ok:
+            raise DeliveryError(f"Google Drive could not download {file_name} (HTTP {download_response.status_code}).")
+        downloads.append((file_name, download_response.content))
+    return downloads

@@ -1,28 +1,52 @@
 import unittest
+from unittest.mock import Mock, patch
 
-from study_store import PRODUCTS, cart_total, filter_products
+import study_store
 
 
-class StudyStoreTests(unittest.TestCase):
-    def test_search_matches_title_subject_and_level_without_case_sensitivity(self):
-        self.assertEqual([item["id"] for item in filter_products(PRODUCTS, "BIOLOGY")], ["biology-diagrams"])
-        self.assertEqual(len(filter_products(PRODUCTS, "grade 10")), 2)
+class PaidFileDeliveryTests(unittest.TestCase):
+    def test_downloads_only_the_two_expected_private_pdfs(self):
+        listing = Mock(ok=True)
+        listing.json.return_value = {
+            "files": [
+                {"id": "paper-id", "name": "questionpaper2020", "mimeType": "application/pdf"},
+                {"id": "notes-id", "name": "physics.unit 1 and 2.pdf", "mimeType": "application/pdf"},
+                {"id": "extra-id", "name": "unrelated.pdf", "mimeType": "application/pdf"},
+            ]
+        }
+        notes = Mock(ok=True, content=b"notes")
+        paper = Mock(ok=True, content=b"paper")
+        session = Mock()
+        session.get.side_effect = [listing, notes, paper]
 
-    def test_category_filters_products(self):
-        papers = filter_products(PRODUCTS, category="Question Papers")
-        self.assertEqual({item["kind"] for item in papers}, {"Question Papers"})
+        with (
+            patch.object(study_store, "_drive_session", return_value=session),
+            patch.object(study_store.st, "secrets", {"drive": {"folder_id": "folder-id"}}),
+        ):
+            downloads = study_store.load_paid_files()
 
-    def test_price_sort_orders_products(self):
-        ascending = filter_products(PRODUCTS, sort_order="Price: low to high")
-        descending = filter_products(PRODUCTS, sort_order="Price: high to low")
-        self.assertLessEqual(ascending[0]["price"], ascending[-1]["price"])
-        self.assertGreaterEqual(descending[0]["price"], descending[-1]["price"])
-
-    def test_cart_total_counts_quantities_and_ignores_unknown_products(self):
         self.assertEqual(
-            cart_total({"physics-formula-kit": 2, "unknown": 3}, PRODUCTS),
-            298,
+            downloads,
+            [("physics.unit 1 and 2.pdf", b"notes"), ("questionpaper2020.pdf", b"paper")],
         )
+        self.assertEqual(session.get.call_count, 3)
+
+    def test_missing_expected_file_is_an_error(self):
+        listing = Mock(ok=True)
+        listing.json.return_value = {
+            "files": [{"id": "notes-id", "name": "physics.unit 1 and 2", "mimeType": "application/pdf"}]
+        }
+        session = Mock()
+        session.get.return_value = listing
+
+        with (
+            patch.object(study_store, "_drive_session", return_value=session),
+            patch.object(study_store.st, "secrets", {"drive": {"folder_id": "folder-id"}}),
+            self.assertRaises(study_store.DeliveryError),
+        ):
+            study_store.load_paid_files()
+
+        self.assertEqual(session.get.call_count, 1)
 
 
 if __name__ == "__main__":

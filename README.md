@@ -1,8 +1,8 @@
 # MDU Notes | StudyShelf
 
-StudyShelf is a Streamlit storefront prototype for browsing sample study notes, question papers, and revision bundles.
+StudyShelf sells one digital Physics bundle for **$1.00 USD**: `physics.unit 1 and 2` and `questionpaper2020`, delivered only after a successful Razorpay payment is verified by the app.
 
-## Run locally
+## Local development
 
 Requires Python 3.11 or newer.
 
@@ -13,21 +13,57 @@ python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-## Deploy publicly
+Run the tests with:
 
-1. Sign in to [Streamlit Community Cloud](https://share.streamlit.io/) with GitHub.
-2. Select **Create app**, then choose the `asjadsaifi/MDU-Notes` repository, the `main` branch, and `app.py` as the app file.
-3. Choose **Deploy**. Streamlit will build the app and provide its public `*.streamlit.app` URL.
+```powershell
+python -m unittest discover -s tests -v
+```
 
-The app requires no secrets or environment variables. Search engines may take time to index a newly deployed site.
+## Required owner setup for paid downloads
 
-## Included features
+The app intentionally does not accept payments or reveal files until all secrets below are configured.
 
-- Search by resource title, subject, or grade.
-- Filter by notes, question papers, or study bundles.
-- Sort products by price.
-- Add sample listings to a session-based shopping bag.
+1. In Google Drive, change the Physics folder's general access from **Anyone with the link** to **Restricted**.
+2. In Google Cloud Console, create/select a project, enable the Google Drive API, create a service account, and create a JSON key. Keep the JSON key private.
+3. Share the restricted Physics folder with the service account's `client_email` as a Viewer. The app uses that service account to retrieve the two PDFs after payment.
+4. In Razorpay, use the live API Key ID and Key Secret for an account authorized to accept international USD payments. Do not use test keys for live sales.
+5. In Streamlit Community Cloud, open the app's **Settings → Secrets** and add the configuration below, replacing all placeholders with real values. Never commit this data or paste it into chat.
 
-## Important limitations
+```toml
+APP_URL = "https://mdu-notes-3ylgkzkawimsbtcbofzps5.streamlit.app/"
 
-This is a demo catalog, not a complete commerce service. Checkout, payments, accounts, order storage, and digital downloads are not implemented. Replace sample listings with content you are authorized to distribute and integrate a payment provider and secure order/download delivery before selling.
+[razorpay]
+key_id = "rzp_live_REPLACE_WITH_KEY_ID"
+key_secret = "REPLACE_WITH_KEY_SECRET"
+
+[drive]
+folder_id = "1Wv3ZJr2-PKK0sefEXCEEyTaT8fNopjQP"
+
+[gcp_service_account]
+type = "service_account"
+project_id = "REPLACE_WITH_PROJECT_ID"
+private_key_id = "REPLACE_WITH_PRIVATE_KEY_ID"
+private_key = """-----BEGIN PRIVATE KEY-----
+REPLACE_WITH_PRIVATE_KEY_CONTENT
+-----END PRIVATE KEY-----
+"""
+client_email = "REPLACE_WITH_SERVICE_ACCOUNT_EMAIL"
+client_id = "REPLACE_WITH_CLIENT_ID"
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "REPLACE_WITH_CLIENT_CERTIFICATE_URL"
+```
+
+Save secrets, then reboot the app. Make a small test-mode payment before enabling live sales; never put live secrets in the repository. Treat downloaded PDFs as customer data and only sell files you have permission to distribute.
+
+## Public deployment
+
+The app is deployed from the `asjadsaifi/MDU-Notes` GitHub repository, branch `main`, main file `app.py`. Streamlit Community Cloud rebuilds the app when the branch is updated. Its public URL is [mdu-notes-3ylgkzkawimsbtcbofzps5.streamlit.app](https://mdu-notes-3ylgkzkawimsbtcbofzps5.streamlit.app/).
+
+## How paid delivery works
+
+- Razorpay creates a fixed-amount USD payment link for the bundle.
+- On return, the app verifies Razorpay's callback signature and fetches the payment link from Razorpay's API to confirm the amount, currency, paid status, and product.
+- Only then does the app use its private Google service-account access to offer the two PDFs for download.
+- The Drive folder must remain restricted; do not put public Drive file links on the product page.
